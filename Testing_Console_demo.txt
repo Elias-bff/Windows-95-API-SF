@@ -1,0 +1,81 @@
+--@name Testing Console demo
+--@author Elias
+--@client
+--@include lib/win95_api.txt
+
+require("lib/win95_api.txt")
+
+local logger={}
+local cursor=material.createFromImage("icon16/cursor.png","")
+
+function log(text)
+    logger[1]=text
+
+    for i=1,#logger do
+        logger[#logger-(i-1)]=logger[#logger-i]
+    end
+end
+    
+local test=window:new("Test Console",{
+    x=0,
+    y=0,
+    width=500*2,
+    height=350*2,
+    size=3,
+    icon=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1145151102220771418/conn_dialup_recbin_phone.png")
+})
+    
+net.receive("cl_log",function()
+    log(net.readTable())
+        
+    test.hitboxes[4][6]=""
+end)
+
+test.paint=function()
+    render.drawGroupOutline(20,50,150,300,"Test panel")
+    render.drawGroupOutline(30,65,125,85,"Buttons")
+    render.drawGroupOutline(30,160,125,85,"Inputs")
+    render.drawGroupOutline(30,255,125,85,"Log")
+
+    test:drawButton(1,38,75,108,18,"print random shit",function()
+    end)
+    test:drawButton(2,38,98,108,18,"print random code",function()
+    end)
+    test:drawButton(3,38,122,108,18,"clear log",function()
+    end)
+        
+    test:textBox(4,38,225,90)
+    test:drawButton(5,131,224,20,12,"",function()
+        net.start("sv_log")
+        net.writeTable({
+            test.hitboxes[4][6]
+        })
+        net.send()
+    end)
+        
+    render.drawRectEx(180,50,325,300,{
+        text=logger
+    })
+        
+    render.drawTextEx(14,33,"sup",{
+        bold=true
+    })
+        
+    render.setMaterial(cursor)
+    render.setColor(Color(0,0,0))
+    render.drawTexturedRect(test.cursor[1][2]-4.2,test.cursor[1][1]-1,14,14)
+    render.setColor(Color(255,255,255))
+    render.drawTexturedRect(test.cursor[1][2]-3.2,test.cursor[1][1],12,12)
+end
+    
+--[[
+local test2=window:new("recycling bin2",{
+    x=0,
+    y=0,
+    width=500*2,
+    height=350*2,
+    size=3
+})
+    
+test2.renderer:setPos(chip():getPos()+Vector(0,0,-20))
+]]
