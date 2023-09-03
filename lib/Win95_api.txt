@@ -1,0 +1,308 @@
+--@name Win95 api
+--@author Elias
+
+local next_frame = 0 
+local fps_delta = 1/60
+window=class("window")
+
+if SERVER then
+    local waitList={}
+    local keyboard=prop.createSent(chip():getPos()-chip():getUp()*1,Angle(),"gmod_wire_keyboard",true,{
+        AutoBuffer=true,
+        EnterKeyAscii=true,
+        Model="models/jaanus/wiretool/wiretool_pixel_sml.mdl",
+        Synchronous=true
+    })
+    keyboard:setColor(Color(0,0,0,0))
+    wire.adjustInputs({"Memory","Usage"},{"string","normal"})
+    wire.adjustOutputs({"Reset"},{"normal"})
+    wire.create(chip(),keyboard,"Memory","Output")
+    wire.create(chip(),keyboard,"Usage","InUse")
+    wire.create(keyboard,chip(),"Reset Output String","Reset")
+
+    function queue(time,func,data)
+        if !waitList[time] then
+            waitList[time]={}
+            local list=waitList[time]
+                
+            func()
+                
+            timer.create("waitList_"..time,time,0,function()
+                if list[#waitList[time]] then
+                    list[#waitList[time]]()
+                    waitList[time][#waitList[time]]=nil
+                else
+                    timer.remove("waitList_"..time)
+                    waitList[time]=nil
+                end
+            end)
+        else
+            table.insert(waitList[time],1,func)
+        end
+    end
+
+    net.receive("cl_edit",function(len,ply)
+        local last
+        local packet=net.readTable()
+        
+        keyboard:use(0,0)
+        
+        hook.add("think","sv_keyboard",function()
+            local data=wire.ports.Memory
+            
+            if last!=data then
+                queue(1/10,function()
+                    net.start("cl_sync"..packet[1])
+                    net.writeTable({tostring(data),packet[2]})
+                    net.send()
+                end)
+                
+                last=data
+            end
+            
+            if wire.ports.Usage==0 then
+                hook.remove("think","sv_keyboard")
+            end
+        end)
+    end)
+    
+    net.receive("sv_log",function()
+        wire.ports.Reset=1
+        
+        timer.simple(0.1,function()
+            wire.ports.Reset=0
+        end)
+        
+        net.start("cl_log")
+        net.writeTable(net.readTable())
+        net.send()
+    end)
+else
+    local cursor=material.createFromImage("icon16/cursor.png","")
+    local h1=render.createFont("DebugFixed",21,300,false)
+    local clr={
+        sliver=Color(229,229,229),
+        black9=Color(90,90,90),
+        black5=Color(50,50,50),
+        white=Color(235,235,235),
+        gray=Color(192,192,192)
+    }
+    
+    function window:initialize(name,style,parentWin,title)
+        self.name=name
+        self.style=style
+        self.parentWin=parentWin
+        self.title=title or name
+        self.hitboxes={}
+        self.cursor={Vector()}
+        
+        render.createRenderTarget(self.name)
+        
+        self.h1=render.createFont("DebugFixed",64/self.style.size,300,false)
+        self.h2=render.createFont("DebugFixedSmall",35/self.style.size,300,false)
+    
+        self.mat = material.create("UnlitGeneric") 
+        self.mat:setTextureRenderTarget("$basetexture",name)
+        self.mat:setInt("$flags", 0)   
+        self.mat:setInt("$flags",256) 
+        
+        hook.add("renderoffscreen","space_"..table.address(self),function()
+            try(function()
+                self.mouse=self.renderer:worldToLocal(trace.intersectRayWithPlane(player():getEyePos(), player():getEyeTrace().Normal, self.renderer:getPos(), self.renderer:getUp()))*28.5+Vector(512)
+                self.mouse[3]=0
+                
+                if self.mouse:withinAABox(Vector(self.style.x,self.style.y),Vector(self.style.height,self.style.width)/(self.style.size-1.1)) then
+                    self.cursor[1]=self.mouse
+                end
+            end)
+            
+            local now = timer.systime()
+            
+            if next_frame > now then 
+                return 
+            end
+            
+            next_frame = now + fps_delta
+        
+            render.selectRenderTarget(name)
+            
+            render.clear(Color(0,0,0,0))
+            
+            render.setColor(clr.gray)
+            render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,self.style.height*0.52)
+            
+            render.setFont(self.h2)
+            
+            if self.paint then
+                self.paint()
+            end
+            
+            render.setColor(Color(0,0,128))
+            render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,25)
+            
+            render.setFont(self.h1)
+            render.setColor(Color(255,255,255))
+            render.drawText(self.style.x+(self.style.icon and 28 or 15),self.style.y+9,self.title)
+            
+            if self.style.icon then
+                render.setMaterial(self.style.icon)
+                render.drawTexturedRectUV(self.style.x+12,self.style.y+12.5,15,15,0,0,32/1024,32/1024)
+            end
+            
+            render.setColor(clr.sliver)
+            render.drawRectOutline(self.style.x+5,self.style.y+5,self.style.width*0.52,self.style.height*0.52,5)
+        end)
+        --parent and parent:localToWorldAngles(Angle(90,-90,0)) or angles+Angle(90,-90,0)
+        self.renderer = holograms.create(chip():getPos(), Angle(90,-90,0), "models/holograms/plane.mdl",Vector(self.style.size))
+        self.renderer:setMaterial("!" .. self.mat:getName())
+        self.renderer:setFilterMin(1)
+        self.renderer:setFilterMag(1)
+        
+        net.receive("cl_sync"..self.name,function()
+            local packet=net.readTable()
+            
+            self.hitboxes[packet[2]][6]=packet[1]
+        end)
+        
+        hook.add("think","hitboxes_"..self.name,function()
+            for i, hitbox in pairs(self.hitboxes) do
+                if self.cursor[1]:withinAABox(hitbox[1],hitbox[2]) then
+                    if !hitbox[4] then
+                        hitbox[4]=true
+                        
+                        if hitbox[3] then
+                            hook.add("inputPressed","hitId_"..i..self.name,function(key)
+                                if key==15 then
+                                    hitbox[3]()
+                                    hitbox[5]=true
+                                    
+                                    return
+                                end
+                            end)
+                            
+                            hook.add("inputReleased","hitId_"..i..self.name,function(key)
+                                if key==15 then
+                                    hitbox[5]=false
+                                    
+                                    return
+                                end
+                            end)
+                        end
+                    end
+                else
+                    if hitbox[4] then
+                        hitbox[4]=false
+                        hitbox[5]=false
+                        
+                        hook.remove("inputPressed","hitId_"..i..self.name)
+                    end
+                end
+            end
+        end)
+        
+        return self
+    end
+    
+    function window:drawHitBox(id,x,y,w,h,callBack)
+        if self.hitboxes[id] then
+            return
+        end
+
+        self.hitboxes[id]={
+            Vector(y,x),
+            Vector(y+h,x+w),
+            callBack,
+            true,
+            false
+        }
+    end
+    
+    function window:edit(id)
+        if player()!=owner() then
+            return
+        end
+        
+        net.start("cl_edit")
+        net.writeTable({self.name,id})
+        net.send()
+    end
+    
+    function render.drawBorder(x,y,width,height,reverse)
+        render.setColor(reverse and clr.black9 or clr.white)
+        render.drawRectFast(x,y,1,height)
+        render.drawRectFast(x,y,width,1)
+        render.setColor(reverse and clr.white or clr.black9)
+        render.drawRectFast(x+width,y,1,height)
+        render.drawRectFast(x,y+height,width,1)
+    end
+    
+    function render.drawTextEx(x,y,text,data)
+        render.setColor(clr.black5)
+        render.drawText(x,y,data.bold and string.gsub(text,text[1],string.upper(text[1]),1) or text)
+        
+        if data.bold then
+            render.drawText(x,y,"_")
+        end
+    end
+    
+    function render.drawRectEx(x,y,width,height,data)
+        render.setColor(Color(255,255,255))
+        render.drawRectFast(x+1,y+1,width-1,height-1)
+        
+        render.setColor(Color(0,0,0))
+        render.drawRectFast(x,y,1,height)
+        render.drawRectFast(x,y,width,1)
+        render.drawRectFast(x+width,y,1,height)
+        
+        render.setColor(clr.black9)
+        render.drawRectFast(x-1,y-1,1,height+2)
+        render.drawRectFast(x-1,y-1,width+2,1)
+        render.drawRectFast(x,y+height,width+1,1)
+        
+        render.setColor(clr.white)
+        render.drawRectFast(x+width+1,y-1,1,height+3)
+        render.drawRectFast(x-1,y+height+1,width+2,1)
+        
+        render.setColor(clr.black5)
+        
+        if data and data.text then
+            for i=1,#data.text do
+                render.drawText(x,y+(i-1)*8,data.text[i][1])
+            end
+        end
+    end
+    
+    function render.drawGroupOutline(x,y,width,height,text)
+        render.setColor(Color(235,235,235))
+        render.drawRectOutline(x+1,y+1,width,height,1)
+        
+        render.setColor(clr.black9)
+        render.drawRectOutline(x,y,width,height,1)
+    
+        render.setColor(Color(192,192,192))
+        render.drawRect(x+9,y,#text*4.4+3,2)
+    
+        render.setColor(clr.black5)
+        render.drawText(x+10,y-5,text)
+    end
+    
+    function window:drawButton(id,x,y,width,height,text,callBack)
+        self:drawHitBox(id,x,y,width,height,callBack) --id,x,y,w,h,callBack
+        
+        render.drawBorder(x,y,width,height,self.hitboxes[id][5])
+        
+        render.setColor(Color(0,0,0))
+        render.drawText(x+width/2,y+height/2-5,text,1)
+    end
+    
+    function window:textBox(id,x,y,width,text)
+        self:drawHitBox(id,x,y,width,10,function()
+            self:edit(id)
+        end)
+        
+        render.drawRectEx(x,y,width,10)
+        
+        render.setColor(clr.black5)
+        render.drawText(x+2,y,self.hitboxes[id][6]or"")
+    end
+end
