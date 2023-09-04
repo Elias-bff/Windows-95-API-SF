@@ -17,14 +17,25 @@ if SERVER then
         net.send()
     end)
 
-    net.receive("sv_logSync",function()
+    net.receive("sv_logSync",function() --make these two passback nets into one generalized one later
         net.start("cl_logSync")
         net.writeTable(net.readTable())
         net.send()
     end)
+    
+    net.receive("sv_logSettings",function()
+        net.start("cl_logSettings")
+        net.writeTable(net.readTable())
+        net.send()
+    end)
 else
-    local logger={}
     local cursor=material.createFromImage("icon16/cursor.png","")
+    local logger={}
+    local data={
+        logConnects=false,
+        logEnts=false,
+        logChat=true
+    }
     
     for i=1,37 do
         logger[38-i]={"<line>"}
@@ -82,6 +93,12 @@ else
         end
     end)
     
+    function syncSettings()
+        net.start("sv_logSettings")
+        net.writeTable({data.logConnects,data.logEnts,data.logChat})
+        net.send()
+    end
+    
     con.paint=function()
         render.drawGroupOutline(20,50,150,300,"Test panel")
         render.drawGroupOutline(30,65,125,85,"Buttons")
@@ -93,11 +110,13 @@ else
             net.writeTable({true,false,false})
             net.send()
         end)
+        
         con:drawButton(2,38,98,108,18,"print all players",function()
             net.start("sv_logSync")
             net.writeTable({false,true,false})
             net.send()
         end)
+        
         con:drawButton(3,38,122,108,18,"clear log",function()
             net.start("sv_logSync")
             net.writeTable({false,false,true})
@@ -112,6 +131,24 @@ else
             })
             net.send()
         end)
+            
+        con:drawButtonToggle(6,45,270,8,8,nil,function()
+            data.logConnects=not data.logConnects
+        
+            syncSettings()
+        end,data.logConnects,"Enable connect Logging")
+        
+        con:drawButtonToggle(7,45,295,8,8,nil,function()
+            data.logEnts=not data.logEnts
+        
+            syncSettings()
+        end,data.logEnts,"Enable Entity Logging")
+        
+        con:drawButtonToggle(8,45,320,8,8,nil,function()
+            data.logChat=not data.logChat
+            
+            syncSettings()
+        end,data.logChat,"Enable Chat Logging")
             
         render.drawRectEx(180,50,325,300,{
             text=logger
@@ -129,10 +166,42 @@ else
         render.setColor(Color(255,255,255))
         render.drawTexturedRect(con.cursor[1][2]-3.2,con.cursor[1][1],12,12)
     end
+       
+    syncSettings()
+    
+    net.receive("cl_logSettings",function()
+        local packet=net.readTable()
         
-    hook.add("PlayerChat","con_chatSync",function(ply,text,_,dead)
-        log({"<line>: "..(dead and "*DEAD*" or "")..ply:getName()..": "..text})
+        data.logConnects=packet[1]
+        data.logEnts=packet[2]
+        data.logChat=packet[3]
+        
+        if packet[1] then
+            hook.add("PlayerConect","ConnectSync",function(id,name,id)
+                log({"<line>: NET.ID: "..id.." ; Name: "..name.." ; STEAM ID: "..id})
+            end)
+        else
+            hook.remove("PlayerConect","ConnectSync")
+        end
+        
+        if packet[2] then
+            hook.add("OnEntityCreated","EntSync",function(ent)
+                log({"<line>: Class: "..ent:getClass().." ; Vector: "..table.toString(ent:getPos())})
+            end)
+        else
+            hook.remove("OnEntityCreated","EntSync")
+        end
+        
+        if packet[3] then
+            hook.add("PlayerChat","chatSync",function(ply,text,_,dead)
+                log({"<line>: "..(dead and "*DEAD*" or "")..ply:getName()..": "..text})
+            end)
+        else
+            hook.remove("PlayerChat","chatSync")
+        end
     end)
+    
+    
     
     --[[
     local test2=window:new("recycling bin2",{
