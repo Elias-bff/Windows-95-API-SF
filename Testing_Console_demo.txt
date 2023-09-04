@@ -5,6 +5,18 @@
 require("lib/win95_api.txt")
 
 if SERVER then
+    net.receive("sv_log",function()
+        wire.ports.Reset=1
+        
+        timer.simple(0.1,function()
+            wire.ports.Reset=0
+        end)
+        
+        net.start("cl_log")
+        net.writeTable(net.readTable())
+        net.send()
+    end)
+
     net.receive("sv_logSync",function()
         net.start("cl_logSync")
         net.writeTable(net.readTable())
@@ -26,7 +38,7 @@ else
         logger[1]=text
     end
        
-    local test=window:new("Test Console",{
+    local con=window:new("Test Console",{
         x=0,
         y=0,
         width=500*2,
@@ -38,14 +50,14 @@ else
     net.receive("cl_log",function()
         log(net.readTable())
             
-        test.hitboxes[4][6]=""
+        con.hitboxes[4][6]=""
     end)
     
     net.receive("cl_logSync",function()
         local packet=net.readTable()
         
         if packet[1] then
-            local random={"A modest granite door in a dire marsh marks the entrance to this dungeon.","Beyond the granite door lies a grand, clammy room.","It's covered in large bones, small bones and crawling insects.","","Further ahead are two paths, you take the right.","Its twisted trail leads passed countless rooms and soon you enter a ragged area.","It's packed with boxes full of runes and magical equipment, as well as skeletons.","What happened in this place?","","You advance carefully onwards, deeper into the dungeon's secrets.","You pass many different passages, they all look so similar, this whole place is a maze.","You eventually make it to what is likely the final room.","A wide wooden door blocks your path.","Dire warning messages are all over it, somehow untouched by time and the elements.","You step closer to inspect it and.. wait.. did somebody just knock on the door?",""}
+            local random={"","A modest granite door in a dire marsh marks the entrance to this dungeon.","Beyond the granite door lies a grand, clammy room.","It's covered in large bones, small bones and crawling insects.","","Further ahead are two paths, you take the right.","Its twisted trail leads passed countless rooms and soon you enter a ragged area.","It's packed with boxes full of runes and magical equipment, as well as skeletons.","What happened in this place?","","You advance carefully onwards, deeper into the dungeon's secrets.","You pass many different passages, they all look so similar, this whole place is a maze.","You eventually make it to what is likely the final room.","A wide wooden door blocks your path.","Dire warning messages are all over it, somehow untouched by time and the elements.","You step closer to inspect it and.. wait.. did somebody just knock on the door?",""}
             
             for i=1,#random do
                 timer.simple(i/8,function()
@@ -54,7 +66,8 @@ else
             end
         end
         if packet[2] then
-            local plys=table.add(find.allPlayers(),{""})
+            local plys=table.add({""},find.allPlayers())
+            plys[#plys+1]=""
             
             for i=1,#plys do
                 timer.simple(i/8,function()
@@ -107,18 +120,20 @@ else
         render.drawTextEx(14,33,"sup",{
             bold=true
         })
-            
+    end
+    
+    con.overlay=function()
         render.setMaterial(cursor)
         render.setColor(Color(0,0,0))
-        render.drawTexturedRect(test.cursor[1][2]-4.2,test.cursor[1][1]-1,14,14)
+        render.drawTexturedRect(con.cursor[1][2]-4.2,con.cursor[1][1]-1,14,14)
         render.setColor(Color(255,255,255))
-        render.drawTexturedRect(test.cursor[1][2]-3.2,test.cursor[1][1],12,12)
+        render.drawTexturedRect(con.cursor[1][2]-3.2,con.cursor[1][1],12,12)
     end
         
     hook.add("PlayerChat","con_chatSync",function(ply,text,_,dead)
         log({"<line>: "..(dead and "*DEAD*" or "")..ply:getName()..": "..text})
     end)
-    --PlayerChat(Player ply, string text, boolean team, boolean isdead)
+    
     --[[
     local test2=window:new("recycling bin2",{
         x=0,

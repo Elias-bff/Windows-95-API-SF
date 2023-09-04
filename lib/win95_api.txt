@@ -66,15 +66,12 @@ if SERVER then
         end)
     end)
     
-    net.receive("sv_log",function()
-        wire.ports.Reset=1
+    net.receive("sv_dragSync",function(len,ply)
+        local packet=net.readTable()
         
-        timer.simple(0.1,function()
-            wire.ports.Reset=0
-        end)
-        
-        net.start("cl_log")
-        net.writeTable(net.readTable())
+        net.start("cl_dragSync"..packet[2])
+        net.writeTable(packet)
+        net.writeEntity(ply)
         net.send()
     end)
 else
@@ -114,6 +111,20 @@ else
         target()
         
         render.setStencilEnable(false)
+    end
+    
+    function window:drawHitBox(id,x,y,w,h,callBack)
+        if self.hitboxes[id] then
+            return
+        end
+
+        self.hitboxes[id]={
+            Vector(y,x),
+            Vector(y+h,x+w),
+            callBack,
+            true,
+            false
+        }
     end
     
     function window:initialize(name,style,parentWin,title)
@@ -167,6 +178,23 @@ else
             
             render.setColor(Color(0,0,128))
             render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,25)
+            self:drawHitBox(0,self.style.x+5,self.style.y+5,self.style.width*0.52,25,function()
+                net.start("sv_dragSync")
+                net.writeTable({true,self.name,self.cursor[1]})
+                net.send()
+                
+                hook.add("think","dragLock_"..self.name,function()
+                    if !self.hitboxes[0][5] then
+                        hook.remove("think","dragLock_"..self.name)
+                        
+                        net.start("sv_dragSync")
+                        net.writeTable({false,self.name,self.cursor[1]})
+                        net.send()
+                        
+                        return
+                    end
+                end)
+            end)
             
             render.setFont(self.h1)
             render.setColor(Color(255,255,255))
@@ -179,17 +207,37 @@ else
             
             render.setColor(clr.sliver)
             render.drawRectOutline(self.style.x+5,self.style.y+5,self.style.width*0.52,self.style.height*0.52,5)
+            
+            if self.overlay then
+                self.overlay()
+            end
         end)
-        --parent and parent:localToWorldAngles(Angle(90,-90,0)) or angles+Angle(90,-90,0)
+
         self.renderer = holograms.create(chip():getPos(), Angle(90,-90,0), "models/holograms/plane.mdl",Vector(self.style.size))
         self.renderer:setMaterial("!" .. self.mat:getName())
         self.renderer:setFilterMin(1)
         self.renderer:setFilterMag(1)
-        
+
         net.receive("cl_sync"..self.name,function()
             local packet=net.readTable()
             
             self.hitboxes[packet[2]][6]=packet[1]
+        end)
+        
+        net.receive("cl_dragSync"..self.name,function()
+            local packet=net.readTable()
+            local ent=net.readEntity()
+            
+            printConsole(packet[1])
+
+            if packet[1] then
+                hook.add("think","dragging_"..self.name,function() --math is super broken rn lmao
+                    self.renderer:setAngles(Angle(0,(self.renderer:getPos()-ent:getEyePos()):getAngle()[2],0)+Angle(90,0,180))
+                    self.renderer:setPos(((ent:getEyePos()+ent:getForward()*30)+(ent:getRight()*packet[3][1])/10)-(ent:getUp()*packet[3][2])/10)
+                end)
+            else
+                hook.remove("think","dragging_"..self.name)
+            end
         end)
         
         hook.add("think","hitboxes_"..self.name,function()
@@ -229,20 +277,6 @@ else
         end)
         
         return self
-    end
-    
-    function window:drawHitBox(id,x,y,w,h,callBack)
-        if self.hitboxes[id] then
-            return
-        end
-
-        self.hitboxes[id]={
-            Vector(y,x),
-            Vector(y+h,x+w),
-            callBack,
-            true,
-            false
-        }
     end
     
     function window:edit(id)
