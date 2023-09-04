@@ -228,12 +228,12 @@ else
             local packet=net.readTable()
             local ent=net.readEntity()
             
-            printConsole(packet[1])
-
             if packet[1] then
-                hook.add("think","dragging_"..self.name,function() --math is super broken rn lmao
-                    self.renderer:setAngles(Angle(0,(self.renderer:getPos()-ent:getEyePos()):getAngle()[2],0)+Angle(90,0,180))
-                    self.renderer:setPos(((ent:getEyePos()+ent:getForward()*30)+(ent:getRight()*packet[3][1])/10)-(ent:getUp()*packet[3][2])/10)
+                hook.add("think","dragging_"..self.name,function()
+                    local offset=(ent:getEyePos()+ent:getForward()*30)+(((ent:getRight()/4)*(512-packet[3][2]))/8)-(((ent:getUp()/4)*(512-packet[3][1]))/8)
+                    
+                    self.renderer:setAngles(Angle(0,(offset*2-ent:getEyePos()):getAngle()[2],0)+Angle(90,0,180))
+                    self.renderer:setPos(offset)
                 end)
             else
                 hook.remove("think","dragging_"..self.name)
@@ -260,6 +260,8 @@ else
                                 if key==15 then
                                     hitbox[5]=false
                                     
+                                    hook.remove("inputReleased","hitId_"..i..self.name)
+                                    
                                     return
                                 end
                             end)
@@ -268,7 +270,6 @@ else
                 else
                     if hitbox[4] then
                         hitbox[4]=false
-                        hitbox[5]=false
                         
                         hook.remove("inputPressed","hitId_"..i..self.name)
                     end
