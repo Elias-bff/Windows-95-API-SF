@@ -5,8 +5,29 @@ local next_frame = 0
 local fps_delta = 1/60
 window=class("window")
 
+function queue(time,func,data)
+    if !waitList[time] then
+        waitList[time]={}
+        local list=waitList[time]
+                
+        func()
+                
+        timer.create("waitList_"..time,time,0,function()
+            if list[#waitList[time]] then
+                list[#waitList[time]]()
+                waitList[time][#waitList[time]]=nil
+            else
+                timer.remove("waitList_"..time)
+                waitList[time]=nil
+            end
+        end)
+    else
+        table.insert(waitList[time],1,func)
+    end
+end
+
 if SERVER then
-    local waitList={}
+    waitList={}
     local keyboard=prop.createSent(chip():getPos()-chip():getUp()*1,Angle(),"gmod_wire_keyboard",true,{
         AutoBuffer=true,
         EnterKeyAscii=true,
@@ -19,27 +40,6 @@ if SERVER then
     wire.create(chip(),keyboard,"Memory","Output")
     wire.create(chip(),keyboard,"Usage","InUse")
     wire.create(keyboard,chip(),"Reset Output String","Reset")
-
-    function queue(time,func,data)
-        if !waitList[time] then
-            waitList[time]={}
-            local list=waitList[time]
-                
-            func()
-                
-            timer.create("waitList_"..time,time,0,function()
-                if list[#waitList[time]] then
-                    list[#waitList[time]]()
-                    waitList[time][#waitList[time]]=nil
-                else
-                    timer.remove("waitList_"..time)
-                    waitList[time]=nil
-                end
-            end)
-        else
-            table.insert(waitList[time],1,func)
-        end
-    end
 
     net.receive("cl_edit",function(len,ply)
         local last
@@ -72,9 +72,14 @@ if SERVER then
         net.start("cl_dragSync"..packet[2])
         net.writeTable(packet)
         net.writeEntity(ply)
-        net.send()
+        net.send(packet[1]=="distSync" and find.allPlayers(function(plyI)
+            if plyI!=ply then
+                return plyI
+            end
+        end) or nil)
     end)
 else
+    waitList={}
     local h1=render.createFont("DebugFixed",21,300,false)
     local clr={
         sliver=Color(229,229,229),
@@ -134,6 +139,7 @@ else
         self.title=title or name
         self.hitboxes={}
         self.cursor={Vector()}
+        self.distOffset=nil
         
         render.createRenderTarget(self.name)
         
@@ -179,14 +185,25 @@ else
             render.setColor(Color(0,0,128))
             render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,25)
             self:drawHitBox(0,self.style.x+5,self.style.y+5,self.style.width*0.52,25,function()
+                local distOffset=self.renderer:getPos():getDistance(player():getEyePos())
+                
                 net.start("sv_dragSync")
-                net.writeTable({true,self.name,self.cursor[1]})
+                net.writeTable({true,self.name,self.cursor[1],distOffset})
                 net.send()
+                
+                hook.add("mouseWheeled","dist_"..self.name,function(delta)
+                    distOffset=distOffset+(delta*2)
+                        
+                    net.start("sv_dragSync")
+                    net.writeTable({"distSync",self.name,nil,distOffset})
+                    net.send()
+                end)
                 
                 hook.add("think","dragLock_"..self.name,function()
                     if !self.hitboxes[0][5] then
                         hook.remove("think","dragLock_"..self.name)
-                        
+                        hook.remove("mouseWheeled","dist_"..self.name)
+                                        
                         net.start("sv_dragSync")
                         net.writeTable({false,self.name,self.cursor[1]})
                         net.send()
@@ -227,16 +244,26 @@ else
         net.receive("cl_dragSync"..self.name,function()
             local packet=net.readTable()
             local ent=net.readEntity()
+            self.distOffset=packet[4]
+            
+            if player()==ent then
+                hook.add("mouseWheeled","cldist_"..self.name,function(delta)
+                    self.distOffset=self.distOffset+(delta*2)
+                end)
+            end
+            
+            if packet[1]=="distSync" then
+                return
+            end
             
             if packet[1] then
-                hook.add("think","dragging_"..self.name,function()
-                    local offset=(ent:getEyePos()+ent:getForward()*30)+(((ent:getRight()/4)*(512-packet[3][2]))/8)-(((ent:getUp()/4)*(512-packet[3][1]))/8)
-                    
-                    self.renderer:setAngles(Angle(0,(offset*2-ent:getEyePos()):getAngle()[2],0)+Angle(90,0,180))
-                    self.renderer:setPos(offset)
+                hook.add("think","dragging_"..self.name,function() --improve later
+                    self.renderer:setAngles(Angle(0,((ent:getEyePos()+ent:getForward()*self.distOffset)-(((ent:getRight()/10)*(512-packet[3][2]))/8)+(((ent:getUp()/10)*(512-packet[3][1]))/8)-ent:getEyePos()):getAngle()[2],0)+Angle(90,0,180))
+                    self.renderer:setPos((ent:getEyePos()+ent:getForward()*self.distOffset)+(((ent:getRight()/4)*(512-packet[3][2]))/8)-(((ent:getUp()/4)*(512-packet[3][1]))/8))
                 end)
             else
                 hook.remove("think","dragging_"..self.name)
+                hook.remove("mouseWheeled","cldist_"..self.name)
             end
         end)
         
