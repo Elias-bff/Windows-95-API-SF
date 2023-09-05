@@ -82,7 +82,9 @@ else
     waitList={}
     local h1=render.createFont("DebugFixed",21,300,false)
     local icons={
-        checkmark=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148317574124281886/checkmark.png")
+        checkmark=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148317574124281886/checkmark.png"),
+        minmax=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148471959898837062/min_max.png"),
+        close=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148471959638786101/close.png")
     }
     local clr={
         sliver=Color(229,229,229),
@@ -155,6 +157,9 @@ else
         self.mat:setInt("$flags",256) 
         
         hook.add("renderoffscreen","space_"..table.address(self),function()
+            render.setFilterMin(1)
+            render.setFilterMag(1)
+            
             try(function()
                 self.mouse=self.renderer:worldToLocal(trace.intersectRayWithPlane(player():getEyePos(), player():getEyeTrace().Normal, self.renderer:getPos(), self.renderer:getUp()))*28.5+Vector(512)
                 self.mouse[3]=0
@@ -187,6 +192,7 @@ else
             
             render.setColor(Color(0,0,128))
             render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,25)
+            
             self:drawHitBox(0,self.style.x+5,self.style.y+5,self.style.width*0.52,25,function()
                 local distOffset=self.renderer:getPos():getDistance(player():getEyePos())-4
                 
@@ -219,6 +225,11 @@ else
             render.setFont(self.h1)
             render.setColor(Color(255,255,255))
             render.drawText(self.style.x+(self.style.icon and 28 or 15),self.style.y+9,self.title)
+            
+            render.setMaterial(icons.minmax)
+            render.drawTexturedRectUV(self.style.x+self.style.width*0.52-54,self.style.y+12.5,15*2.29,15,0,0,32/1024,14/1024)
+            render.setMaterial(icons.close)
+            render.drawTexturedRectUV(self.style.x+self.style.width*0.52-17,self.style.y+12.5,15,15,0,0,16/1024,14/1024)
             
             if self.style.icon then
                 render.setMaterial(self.style.icon)

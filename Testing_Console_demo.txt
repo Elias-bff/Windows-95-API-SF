@@ -200,18 +200,4 @@ else
             hook.remove("PlayerChat","chatSync")
         end
     end)
-    
-    
-    
-    --[[
-    local test2=window:new("recycling bin2",{
-        x=0,
-        y=0,
-        width=500*2,
-        height=350*2,
-        size=3
-    })
-        
-    test2.renderer:setPos(chip():getPos()+Vector(0,0,-20))
-    ]]
 end
