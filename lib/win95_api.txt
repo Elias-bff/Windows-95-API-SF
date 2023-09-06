@@ -26,6 +26,35 @@ function queue(time,func,data)
     end
 end
 
+function reset()
+    render.setStencilWriteMask(0xFF)
+    render.setStencilTestMask(0xFF)
+    render.setStencilReferenceValue(0)
+    render.setStencilCompareFunction(STENCIL.ALWAYS)
+    render.setStencilPassOperation(STENCIL.KEEP)
+    render.setStencilFailOperation(STENCIL.KEEP)
+    render.setStencilZFailOperation(STENCIL.KEEP)
+    render.clearStencil()
+end
+    
+function mask(mask, target, invert)
+    reset()
+        
+    render.setStencilEnable(true)
+    render.setStencilReferenceValue(1)
+    render.setStencilCompareFunction(1)
+    render.setStencilFailOperation(3)
+        
+    mask()
+        
+    render.setStencilCompareFunction(invert and 6 or 3)
+    render.setStencilFailOperation(1)
+        
+    target()
+        
+    render.setStencilEnable(false)
+end
+
 if SERVER then
     waitList={}
     local keyboard=prop.createSent(chip():getPos()-chip():getUp()*1,Angle(),"gmod_wire_keyboard",true,{
@@ -82,9 +111,10 @@ else
     waitList={}
     local h1=render.createFont("DebugFixed",21,300,false)
     local icons={
+        cursor=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148745004609716254/arrow.png"),
         checkmark=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148317574124281886/checkmark.png"),
-        minmax=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148471959898837062/min_max.png"),
-        close=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148471959638786101/close.png")
+        minmax=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148472663384268871/min_max.png"),
+        close=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148472663052914698/close.png")
     }
     local clr={
         sliver=Color(229,229,229),
@@ -93,35 +123,6 @@ else
         white=Color(235,235,235),
         gray=Color(192,192,192)
     }
-    
-    local function reset()
-        render.setStencilWriteMask(0xFF)
-        render.setStencilTestMask(0xFF)
-        render.setStencilReferenceValue(0)
-        render.setStencilCompareFunction(STENCIL.ALWAYS)
-        render.setStencilPassOperation(STENCIL.KEEP)
-        render.setStencilFailOperation(STENCIL.KEEP)
-        render.setStencilZFailOperation(STENCIL.KEEP)
-        render.clearStencil()
-    end
-    
-    function mask(mask, target, invert)
-        reset()
-        
-        render.setStencilEnable(true)
-        render.setStencilReferenceValue(1)
-        render.setStencilCompareFunction(1)
-        render.setStencilFailOperation(3)
-        
-        mask()
-        
-        render.setStencilCompareFunction(invert and 6 or 3)
-        render.setStencilFailOperation(1)
-        
-        target()
-        
-        render.setStencilEnable(false)
-    end
     
     function window:drawHitBox(id,x,y,w,h,callBack)
         if self.hitboxes[id] then
@@ -156,7 +157,12 @@ else
         self.mat:setInt("$flags", 0)   
         self.mat:setInt("$flags",256) 
         
-        hook.add("renderoffscreen","space_"..table.address(self),function()
+        self.style.last={
+            self.style.width,
+            self.style.height
+        }
+        
+        hook.add("renderoffscreen","space_"..self.name,function()
             render.setFilterMin(1)
             render.setFilterMag(1)
             
@@ -181,6 +187,17 @@ else
             
             render.clear(Color(0,0,0,0))
             
+            if self.renderer:getUp():dot(player():getAimVector())>0 then
+                self.renderer:setScale(Vector(self.style.size,-self.style.size,self.style.size))
+                
+                render.setColor(clr.gray)
+                render.drawRectFast(self.style.x+5+self.style.width*0.52,self.style.y+5,self.style.width*0.52,self.style.height*0.52)
+                                
+                return
+            else
+                self.renderer:setScale(Vector(self.style.size))
+            end
+            
             render.setColor(clr.gray)
             render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,self.style.height*0.52)
             
@@ -193,8 +210,8 @@ else
             render.setColor(Color(0,0,128))
             render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,25)
             
-            self:drawHitBox(0,self.style.x+5,self.style.y+5,self.style.width*0.52,25,function()
-                local distOffset=self.renderer:getPos():getDistance(player():getEyePos())-4
+            self:drawHitBox(0,self.style.x+5,self.style.y+5,self.style.width*0.52-59,25,function()
+                local distOffset=self.renderer:getPos():getDistance(player():getEyePos())-5
                 
                 net.start("sv_dragSync")
                 net.writeTable({true,self.name,self.cursor[1],distOffset})
@@ -228,8 +245,43 @@ else
             
             render.setMaterial(icons.minmax)
             render.drawTexturedRectUV(self.style.x+self.style.width*0.52-54,self.style.y+12.5,15*2.29,15,0,0,32/1024,14/1024)
+            
+            self:drawHitBox(-1,self.style.x+self.style.width*0.52-54,self.style.y+12.5,17,15,function()
+            
+            end)
+
+            self:drawHitBox(-2,self.style.x+self.style.width*0.52-37,self.style.y+12.5,17.29,15,function()
+                self.hitboxes={}
+                self.style.fullscreen=not self.style.fullscreen
+                
+                if !self.style.fullscreen then
+                    self.style.width=self.style.last[1]
+                    self.style.height=self.style.last[2]
+                else
+                    self.style.width=(980*2)-5
+                    self.style.height=(980*2)-5
+                end
+            end)
+            
             render.setMaterial(icons.close)
             render.drawTexturedRectUV(self.style.x+self.style.width*0.52-17,self.style.y+12.5,15,15,0,0,16/1024,14/1024)
+            
+            self:drawHitBox(-3,self.style.x+self.style.width*0.52-17,self.style.y+12.5,15,15,function()
+                hook.remove("renderoffscreen","space_"..self.name)
+                hook.remove("think","hitboxes_"..self.name)
+                
+                for i, hitbox in pairs(self.hitboxes) do
+                    if hitbox[3] then
+                        hook.remove("inputPressed","hitId_"..i..self.name)
+                        hook.remove("inputReleased","hitId_"..i..self.name)
+                    end
+                end
+                
+                self.renderer:remove()
+                
+                self.hitboxes=nil
+                self=nil
+            end)
             
             if self.style.icon then
                 render.setMaterial(self.style.icon)
@@ -241,6 +293,23 @@ else
             
             if self.overlay then
                 self.overlay()
+            end
+            
+            render.setMaterial(icons.cursor)
+            render.setColor(Color(255,255,255))
+            render.drawTexturedRectUV(self.cursor[1][2]-3.2,self.cursor[1][1],30,30,0,0,32/1024,32/1024)
+            
+            if !debugging then 
+                return 
+            end
+            
+            for id, hitbox in pairs(self.hitboxes) do
+                local topLeft=hitbox[1]
+                local bottomRight=hitbox[2]
+                
+                render.setColor(Color((timer.realtime()*40)+id*20,1,1):hsvToRGB())
+                render.drawLine(topLeft[2],topLeft[1],bottomRight[2],bottomRight[1])
+                render.drawRectOutline(topLeft[2],topLeft[1],bottomRight[2]-topLeft[2],bottomRight[1]-topLeft[1],1)
             end
         end)
 
@@ -264,6 +333,18 @@ else
                 hook.add("mouseWheeled","cldist_"..self.name,function(delta)
                     self.distOffset=self.distOffset+(delta*2)
                 end)
+                
+                hook.add("inputPressed","clmisc_"..self.name,function(key)
+                    if key==81 or key==82 then
+                        packet[5]=true
+                    end
+                end)
+                
+                hook.add("inputReleased","clmisc_"..self.name,function(key)
+                    if key==81 or key==82 then
+                        packet[5]=false
+                    end
+                end)
             end
             
             if packet[1]=="distSync" then
@@ -271,15 +352,20 @@ else
             end
             
             if packet[1] then
-                hook.add("think","dragging_"..self.name,function() --improve later
+                hook.add("think","dragging_"..self.name,function()
                     local Trace=ent:getEyeTrace().Normal
                     
-                    self.renderer:setAngles(Angle(0,((ent:getEyePos()+Trace*self.distOffset)-(((ent:getRight()/10)*(512-packet[3][2]))/8)+(((ent:getUp()/10)*(512-packet[3][1]))/8)-ent:getEyePos()):getAngle()[2],0)+Angle(90,0,180))
-                    self.renderer:setPos((ent:getEyePos()+Trace*self.distOffset)+(((ent:getRight()/4)*(512-packet[3][2]))/8)-(((ent:getUp()/4)*(512-packet[3][1]))/8))
+                    self.renderer:setAngles(Angle(packet[5] and 0 or math.round(ent:getEyeAngles()[1]/10)*10,ent:getEyeAngles()[2],0)+Angle(90,0,180))
+                    self.renderer:setPos((ent:getEyePos()+Trace*self.distOffset)+(((ent:getRight()/4)*(512-packet[3][2]))/8)-(((ent:getUp()/3.6)*(512-packet[3][1]))/8))
                 end)
             else
                 hook.remove("think","dragging_"..self.name)
-                hook.remove("mouseWheeled","cldist_"..self.name)
+                
+                if player()==ent then
+                    hook.remove("mouseWheeled","cldist_"..self.name)
+                    hook.remove("inputPressed","clmisc_"..self.name)
+                    hook.remove("inputReleased","clmisc_"..self.name)
+                end
             end
         end)
         
@@ -313,7 +399,7 @@ else
                 else
                     if hitbox[4] then
                         hitbox[4]=false
-                        
+     
                         hook.remove("inputPressed","hitId_"..i..self.name)
                     end
                 end
@@ -379,7 +465,7 @@ else
                     if data.text[i] and data.text[i][1] then
                         local num=(#data.text+1)-i
                         
-                        render.drawText(x+(#tostring(num)==1 and 5 or 3),y+(i-1)*8+2,string.replace(data.text[(#data.text+1)-i][1],"<line>",#tostring(num)==1 and num.." " or num))
+                        render.drawText(x+(#tostring(num)==1 and 5 or 3),y+(i-1)*9+2,string.replace(data.text[(#data.text+1)-i][1],"<line>",#tostring(num)==1 and num.." " or num))
                     end
                 end
             end
@@ -398,6 +484,17 @@ else
     
         render.setColor(clr.black5)
         render.drawText(x+10,y-5,text)
+    end
+    
+    function render.contextMenu(x,y,width,height,data)
+--[[
+        for i, item in pairs(data.options)do 
+            printConsole(table.toString(item))
+        end
+]]
+    end
+    
+    function render.dropbox(x,y,width,height,data)
     end
     
     function window:drawButton(id,x,y,width,height,text,callBack)
@@ -446,5 +543,8 @@ else
         
         render.setColor(clr.black5)
         render.drawText(x+2,y,self.hitboxes[id][6] or "")
+    end
+    
+    function window:scrollBar(x,y,width,height,data)
     end
 end

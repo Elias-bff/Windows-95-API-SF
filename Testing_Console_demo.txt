@@ -29,6 +29,13 @@ if SERVER then
         net.send()
     end)
 else
+    bass.loadURL("https://cdn.discordapp.com/attachments/1120967741801762919/1148802725254008842/The_Microsoft_Sound.wav","noblock 3d",function(snd)
+        if snd then
+            snd:play()
+            snd:setPos(chip():getPos())
+        end
+    end)
+
     local cursor=material.createFromImage("icon16/cursor.png","")
     local logger={}
     local data={
@@ -37,13 +44,13 @@ else
         logChat=true
     }
     
-    for i=1,37 do
-        logger[38-i]={"<line>"}
+    for i=1,33 do
+        logger[34-i]={"<line>"}
     end
         
     function log(text)
-        for i=1,37 do
-            logger[37-(i-1)]=logger[37-i]
+        for i=1,33 do
+            logger[33-(i-1)]=logger[33-i]
         end
         
         logger[1]=text
@@ -87,8 +94,8 @@ else
             end
         end
         if packet[3] then
-            for i=1,37 do
-                logger[38-i]={"<line>"}
+            for i=1,33 do
+                logger[34-i]={"<line>"}
             end
         end
     end)
@@ -100,6 +107,7 @@ else
     end
     
     con.paint=function()
+        --render.drawRectFast(self.style.x,self.style.y,self.style.width*0.52,self.style.height*0.52)
         render.drawGroupOutline(20,50,150,300,"Test panel")
         render.drawGroupOutline(30,65,125,85,"Buttons")
         render.drawGroupOutline(30,160,125,85,"Inputs")
@@ -136,7 +144,7 @@ else
             data.logConnects=not data.logConnects
         
             syncSettings()
-        end,data.logConnects,"Enable connect Logging")
+        end,data.logConnects,"Enable Connect Logs")
         
         con:drawButtonToggle(7,45,295,8,8,nil,function()
             data.logEnts=not data.logEnts
@@ -159,14 +167,6 @@ else
         })
     end
     
-    con.overlay=function()
-        render.setMaterial(cursor)
-        render.setColor(Color(0,0,0))
-        render.drawTexturedRect(con.cursor[1][2]-4.2,con.cursor[1][1]-1,14,14)
-        render.setColor(Color(255,255,255))
-        render.drawTexturedRect(con.cursor[1][2]-3.2,con.cursor[1][1],12,12)
-    end
-       
     syncSettings()
     
     net.receive("cl_logSettings",function()
