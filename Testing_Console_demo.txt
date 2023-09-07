@@ -17,25 +17,12 @@ if SERVER then
         net.send()
     end)
 
-    net.receive("sv_logSync",function() --make these two passback nets into one generalized one later
-        net.start("cl_logSync")
-        net.writeTable(net.readTable())
-        net.send()
-    end)
-    
-    net.receive("sv_logSettings",function()
-        net.start("cl_logSettings")
+    net.receive("sv_sync",function()
+        net.start("cl_"..net.readString())
         net.writeTable(net.readTable())
         net.send()
     end)
 else
-    bass.loadURL("https://cdn.discordapp.com/attachments/1120967741801762919/1148802725254008842/The_Microsoft_Sound.wav","noblock 3d",function(snd)
-        if snd then
-            snd:play()
-            snd:setPos(chip():getPos())
-        end
-    end)
-
     local cursor=material.createFromImage("icon16/cursor.png","")
     local logger={}
     local data={
@@ -101,7 +88,8 @@ else
     end)
     
     function syncSettings()
-        net.start("sv_logSettings")
+        net.start("sv_sync")
+        net.writeString("logSettings")
         net.writeTable({data.logConnects,data.logEnts,data.logChat})
         net.send()
     end
@@ -114,24 +102,30 @@ else
         render.drawGroupOutline(30,255,125,85,"Settings")
     
         con:drawButton(1,38,75,108,18,"print random shit",function()
-            net.start("sv_logSync")
+            net.start("sv_sync")
+            net.writeString("logSync")
             net.writeTable({true,false,false})
             net.send()
         end)
         
         con:drawButton(2,38,98,108,18,"print all players",function()
-            net.start("sv_logSync")
+            net.start("sv_sync")
+            net.writeString("logSync")
             net.writeTable({false,true,false})
             net.send()
         end)
         
         con:drawButton(3,38,122,108,18,"clear log",function()
-            net.start("sv_logSync")
+            net.start("sv_sync")
+            net.writeString("logSync")
             net.writeTable({false,false,true})
             net.send()
         end)
+        
+        con:colorPalette(38,168,9,4)
             
         con:textBox(4,38,225,90)
+        
         con:drawButton(5,131,224,20,12,"log",function()
             net.start("sv_log")
             net.writeTable({

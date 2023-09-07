@@ -70,6 +70,12 @@ if SERVER then
     wire.create(chip(),keyboard,"Usage","InUse")
     wire.create(keyboard,chip(),"Reset Output String","Reset")
 
+    net.receive("sv_passback",function()
+        net.start("cl_passback"..net.readString())
+        net.writeTable(net.readTable())
+        net.send()
+    end)
+
     net.receive("cl_edit",function(len,ply)
         local last
         local packet=net.readTable()
@@ -101,7 +107,7 @@ if SERVER then
         net.start("cl_dragSync"..packet[2])
         net.writeTable(packet)
         net.writeEntity(ply)
-        net.send(packet[1]=="distSync" and find.allPlayers(function(plyI)
+        net.send(packet[1]=="setSync" and find.allPlayers(function(plyI)
             if plyI!=ply then
                 return plyI
             end
@@ -162,7 +168,7 @@ else
             self.style.height
         }
         
-        hook.add("renderoffscreen","space_"..self.name,function()
+        hook.add("renderoffscreen","render_"..self.name,function()
             render.setFilterMin(1)
             render.setFilterMag(1)
             
@@ -221,7 +227,7 @@ else
                     distOffset=distOffset+(delta*2)
                         
                     net.start("sv_dragSync")
-                    net.writeTable({"distSync",self.name,nil,distOffset})
+                    net.writeTable({"setSync",self.name,nil,distOffset,player():keyDown(81)})
                     net.send()
                 end)
                 
@@ -251,36 +257,20 @@ else
             end)
 
             self:drawHitBox(-2,self.style.x+self.style.width*0.52-37,self.style.y+12.5,17.29,15,function()
-                self.hitboxes={}
-                self.style.fullscreen=not self.style.fullscreen
-                
-                if !self.style.fullscreen then
-                    self.style.width=self.style.last[1]
-                    self.style.height=self.style.last[2]
-                else
-                    self.style.width=(980*2)-5
-                    self.style.height=(980*2)-5
-                end
+                net.start("sv_passback")
+                net.writeString(self.name)
+                net.writeTable({true,false})
+                net.send()
             end)
             
             render.setMaterial(icons.close)
             render.drawTexturedRectUV(self.style.x+self.style.width*0.52-17,self.style.y+12.5,15,15,0,0,16/1024,14/1024)
             
             self:drawHitBox(-3,self.style.x+self.style.width*0.52-17,self.style.y+12.5,15,15,function()
-                hook.remove("renderoffscreen","space_"..self.name)
-                hook.remove("think","hitboxes_"..self.name)
-                
-                for i, hitbox in pairs(self.hitboxes) do
-                    if hitbox[3] then
-                        hook.remove("inputPressed","hitId_"..i..self.name)
-                        hook.remove("inputReleased","hitId_"..i..self.name)
-                    end
-                end
-                
-                self.renderer:remove()
-                
-                self.hitboxes=nil
-                self=nil
+                net.start("sv_passback")
+                net.writeString(self.name)
+                net.writeTable({false,true})
+                net.send()
             end)
             
             if self.style.icon then
@@ -318,6 +308,40 @@ else
         self.renderer:setFilterMin(1)
         self.renderer:setFilterMag(1)
 
+        net.receive("cl_passback"..self.name,function()
+            local packet=net.readTable()
+            
+            if packet[1] then
+                self.hitboxes={}
+                self.style.fullscreen=not self.style.fullscreen
+                
+                if !self.style.fullscreen then
+                    self.style.width=self.style.last[1]
+                    self.style.height=self.style.last[2]
+                else
+                    self.style.width=(980*2)-5
+                    self.style.height=(980*2)-5
+                end
+            end
+            
+            if packet[2] then
+                hook.remove("renderoffscreen","render_"..self.name)
+                hook.remove("think","hitboxes_"..self.name)
+                
+                for i, hitbox in pairs(self.hitboxes) do
+                    if hitbox[3] then
+                        hook.remove("inputPressed","hitId_"..i..self.name)
+                        hook.remove("inputReleased","hitId_"..i..self.name)
+                    end
+                end
+                
+                self.renderer:remove()
+                
+                self.hitboxes=nil
+                self=nil
+            end
+        end)
+
         net.receive("cl_sync"..self.name,function()
             local packet=net.readTable()
             
@@ -328,7 +352,8 @@ else
             local packet=net.readTable()
             local ent=net.readEntity()
             self.distOffset=packet[4]
-
+            self.snap=packet[5]
+            
             if player()==ent then
                 hook.add("mouseWheeled","cldist_"..self.name,function(delta)
                     self.distOffset=self.distOffset+(delta*2)
@@ -336,18 +361,26 @@ else
                 
                 hook.add("inputPressed","clmisc_"..self.name,function(key)
                     if key==81 or key==82 then
-                        packet[5]=true
+                        self.snap=true
+                        
+                        net.start("sv_dragSync")
+                        net.writeTable({"setSync",self.name,nil,self.distOffset,true})
+                        net.send()
                     end
                 end)
                 
                 hook.add("inputReleased","clmisc_"..self.name,function(key)
                     if key==81 or key==82 then
-                        packet[5]=false
+                        self.snap=false
+                                                
+                        net.start("sv_dragSync")
+                        net.writeTable({"setSync",self.name,nil,self.distOffset,false})
+                        net.send()
                     end
                 end)
             end
             
-            if packet[1]=="distSync" then
+            if packet[1]=="setSync" then
                 return
             end
             
@@ -355,7 +388,7 @@ else
                 hook.add("think","dragging_"..self.name,function()
                     local Trace=ent:getEyeTrace().Normal
                     
-                    self.renderer:setAngles(Angle(packet[5] and 0 or math.round(ent:getEyeAngles()[1]/10)*10,ent:getEyeAngles()[2],0)+Angle(90,0,180))
+                    self.renderer:setAngles(Angle(self.snap and 0 or math.round(ent:getEyeAngles()[1]/10)*10,ent:getEyeAngles()[2],0)+Angle(90,0,180))
                     self.renderer:setPos((ent:getEyePos()+Trace*self.distOffset)+(((ent:getRight()/4)*(512-packet[3][2]))/8)-(((ent:getUp()/3.6)*(512-packet[3][1]))/8))
                 end)
             else
@@ -406,6 +439,14 @@ else
             end
         end)
         
+        bass.loadURL("https://cdn.discordapp.com/attachments/1120967741801762919/1148802726139023430/DING.WAV","noblock 3d",function(snd)
+            if snd then
+                snd:setVolume(0.5)
+                snd:play()
+                snd:setPos(self.renderer:getPos())
+            end
+        end)
+        
         return self
     end
     
@@ -421,11 +462,11 @@ else
     
     function render.drawBorder(x,y,width,height,reverse)
         render.setColor(reverse and clr.black9 or clr.white)
-        render.drawRectFast(x,y,1,height)
-        render.drawRectFast(x,y,width,1)
+        render.drawRectFast(x,y,1,height+1)
+        render.drawRectFast(x,y,width+1,1)
         render.setColor(reverse and clr.white or clr.black9)
-        render.drawRectFast(x+width,y,1,height)
-        render.drawRectFast(x,y+height,width,1)
+        render.drawRectFast(x+width,y,1,height+1)
+        render.drawRectFast(x,y+height,width+1,1)
     end
     
     function render.drawTextEx(x,y,text,data)
@@ -530,7 +571,7 @@ else
         end
         
         if text then
-            render.drawTextEx(x+15,y,text,data or {})
+            render.drawTextEx(x+15,y-1,text,data or {})
         end
     end
     
@@ -543,6 +584,16 @@ else
         
         render.setColor(clr.black5)
         render.drawText(x+2,y,self.hitboxes[id][6] or "")
+    end
+    
+    function window:colorPalette(x,y,columns,rows)
+        for i=1, columns do
+            for ii=1, rows do
+                render.setColor(Color(255/columns-i*255/columns,1,1.5-ii*1/rows):hsvToRGB())
+                render.drawRectFast(x+(i-1)*13,y+(ii-1)*13,9,9)
+                render.drawBorder(x+(i-1)*13-1,y+(ii-1)*13-1,10,10,true)
+            end
+        end
     end
     
     function window:scrollBar(x,y,width,height,data)
