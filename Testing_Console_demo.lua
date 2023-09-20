@@ -1,8 +1,8 @@
 --@name Testing Console demo
 --@author Elias
---@include lib/win95_lib.txt
+--@include lib/win95_lib.lua
 
-require("lib/win95_lib.txt")
+require("lib/win95_lib.lua")
 
 if SERVER then
     net.receive("sv_log",function()
