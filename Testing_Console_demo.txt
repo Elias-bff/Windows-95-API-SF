@@ -1,8 +1,8 @@
 --@name Testing Console demo
 --@author Elias
---@include lib/win95_api.txt
+--@include lib/win95_lib.txt
 
-require("lib/win95_api.txt")
+require("lib/win95_lib.txt")
 
 if SERVER then
     net.receive("sv_log",function()
@@ -95,11 +95,10 @@ else
     end
     
     con.paint=function()
-        --render.drawRectFast(self.style.x,self.style.y,self.style.width*0.52,self.style.height*0.52)
         render.drawGroupOutline(20,50,150,300,"Test panel")
-        render.drawGroupOutline(30,65,125,85,"Buttons")
-        render.drawGroupOutline(30,160,125,85,"Inputs")
-        render.drawGroupOutline(30,255,125,85,"Settings")
+        render.drawGroupOutline(30,65,129,85,"Buttons")
+        render.drawGroupOutline(30,160,129,85,"Inputs")
+        render.drawGroupOutline(30,255,129,85,"Settings")
     
         con:drawButton(1,38,75,108,18,"print random shit",function()
             net.start("sv_sync")
@@ -122,8 +121,8 @@ else
             net.send()
         end)
         
-        con:colorPalette(38,168,9,4)
-            
+        con:colorPalette(9,38,168,118,45,9,3)
+        
         con:textBox(4,38,225,90)
         
         con:drawButton(5,131,224,20,12,"log",function()

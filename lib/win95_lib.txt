@@ -1,62 +1,10 @@
---@name Win95 api
+--@name Win95 lib
 --@author Elias
 
-local next_frame = 0 
-local fps_delta = 1/60
 window=class("window")
 
-function queue(time,func,data)
-    if !waitList[time] then
-        waitList[time]={}
-        local list=waitList[time]
-                
-        func()
-                
-        timer.create("waitList_"..time,time,0,function()
-            if list[#waitList[time]] then
-                list[#waitList[time]]()
-                waitList[time][#waitList[time]]=nil
-            else
-                timer.remove("waitList_"..time)
-                waitList[time]=nil
-            end
-        end)
-    else
-        table.insert(waitList[time],1,func)
-    end
-end
-
-function reset()
-    render.setStencilWriteMask(0xFF)
-    render.setStencilTestMask(0xFF)
-    render.setStencilReferenceValue(0)
-    render.setStencilCompareFunction(STENCIL.ALWAYS)
-    render.setStencilPassOperation(STENCIL.KEEP)
-    render.setStencilFailOperation(STENCIL.KEEP)
-    render.setStencilZFailOperation(STENCIL.KEEP)
-    render.clearStencil()
-end
-    
-function mask(mask, target, invert)
-    reset()
-        
-    render.setStencilEnable(true)
-    render.setStencilReferenceValue(1)
-    render.setStencilCompareFunction(1)
-    render.setStencilFailOperation(3)
-        
-    mask()
-        
-    render.setStencilCompareFunction(invert and 6 or 3)
-    render.setStencilFailOperation(1)
-        
-    target()
-        
-    render.setStencilEnable(false)
-end
-
 if SERVER then
-    waitList={}
+    local waitList={}
     local keyboard=prop.createSent(chip():getPos()-chip():getUp()*1,Angle(),"gmod_wire_keyboard",true,{
         AutoBuffer=true,
         EnterKeyAscii=true,
@@ -64,6 +12,7 @@ if SERVER then
         Synchronous=true
     })
     keyboard:setColor(Color(0,0,0,0))
+    
     wire.adjustInputs({"Memory","Usage"},{"string","normal"})
     wire.adjustOutputs({"Reset"},{"normal"})
     wire.create(chip(),keyboard,"Memory","Output")
@@ -75,6 +24,27 @@ if SERVER then
         net.writeTable(net.readTable())
         net.send()
     end)
+
+    function queue(time,func,data)
+        if !waitList[time] then
+            waitList[time]={}
+            local list=waitList[time]
+                    
+            func()
+                    
+            timer.create("waitList_"..time,time,0,function()
+                if list[#waitList[time]] then
+                    list[#waitList[time]]()
+                    waitList[time][#waitList[time]]=nil
+                else
+                    timer.remove("waitList_"..time)
+                    waitList[time]=nil
+                end
+            end)
+        else
+            table.insert(waitList[time],1,func)
+        end
+    end
 
     net.receive("cl_edit",function(len,ply)
         local last
@@ -107,15 +77,15 @@ if SERVER then
         net.start("cl_dragSync"..packet[2])
         net.writeTable(packet)
         net.writeEntity(ply)
-        net.send(packet[1]=="setSync" and find.allPlayers(function(plyI)
+        net.send((packet[1]=="setSync" and !game.isSinglePlayer()) and find.allPlayers(function(plyI)
             if plyI!=ply then
                 return plyI
             end
         end) or nil)
     end)
 else
-    waitList={}
-    local h1=render.createFont("DebugFixed",21,300,false)
+    local data={}
+    local fps_delta = 1/30
     local icons={
         cursor=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148745004609716254/arrow.png"),
         checkmark=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148317574124281886/checkmark.png"),
@@ -123,12 +93,35 @@ else
         close=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148472663052914698/close.png")
     }
     local clr={
+        blue=Color(0,0,128),
         sliver=Color(229,229,229),
         black9=Color(90,90,90),
         black5=Color(50,50,50),
         white=Color(235,235,235),
         gray=Color(192,192,192)
     }
+    
+    function window:play(url,volume)
+        bass.loadURL(url,"noblock 3d",function(snd,_,err)
+            if snd then
+                snd:setVolume(volume)
+                snd:play()
+                
+                hook.add("think","play_"..url..self.name,function()
+                    try(function()
+                        snd:setPos(self.renderer:getPos())
+                    end)
+                end)
+                
+                timer.simple(snd:getLength(),function()
+                    hook.remove("think","play_"..url..self.name)
+                    snd:stop()
+                end)
+            else
+                print(err) --replace with error window
+            end
+        end)
+    end
     
     function window:drawHitBox(id,x,y,w,h,callBack)
         if self.hitboxes[id] then
@@ -144,15 +137,48 @@ else
         }
     end
     
-    function window:initialize(name,style,parentWin,title)
+    function reset()
+        render.setStencilWriteMask(0xFF)
+        render.setStencilTestMask(0xFF)
+        render.setStencilReferenceValue(0)
+        render.setStencilCompareFunction(STENCIL.ALWAYS)
+        render.setStencilPassOperation(STENCIL.KEEP)
+        render.setStencilFailOperation(STENCIL.KEEP)
+        render.setStencilZFailOperation(STENCIL.KEEP)
+        render.clearStencil()
+    end
+        
+    function mask(mask, target, invert)
+        reset()
+            
+        render.setStencilEnable(true)
+        render.setStencilReferenceValue(1)
+        render.setStencilCompareFunction(1)
+        render.setStencilFailOperation(3)
+            
+        mask()
+            
+        render.setStencilCompareFunction(invert and 6 or 3)
+        render.setStencilFailOperation(1)
+            
+        target()
+            
+        render.setStencilEnable(false)
+    end
+    
+    function window:initialize(name,style,pos,ang,parentWin,title)
         self.name=name
         self.style=style
+        self.style.last={}
         self.parentWin=parentWin
         self.title=title or name
         self.hitboxes={}
-        self.cursor={Vector()}
-        self.distOffset=nil
-        
+        self.data={
+            next_frame=0,
+            cursor={Vector(0)},
+            errors=0
+        }
+
         render.createRenderTarget(self.name)
         
         self.h1=render.createFont("DebugFixed",64/self.style.size,300,false)
@@ -163,11 +189,6 @@ else
         self.mat:setInt("$flags", 0)   
         self.mat:setInt("$flags",256) 
         
-        self.style.last={
-            self.style.width,
-            self.style.height
-        }
-        
         hook.add("renderoffscreen","render_"..self.name,function()
             render.setFilterMin(1)
             render.setFilterMag(1)
@@ -175,19 +196,16 @@ else
             try(function()
                 self.mouse=self.renderer:worldToLocal(trace.intersectRayWithPlane(player():getEyePos(), player():getEyeTrace().Normal, self.renderer:getPos(), self.renderer:getUp()))*28.5+Vector(512)
                 self.mouse[3]=0
-                
-                if self.mouse:withinAABox(Vector(self.style.x,self.style.y),Vector(self.style.height,self.style.width)/(self.style.size-1.1)) then
-                    self.cursor[1]=self.mouse
-                end
+                self.data.cursor[1]=self.mouse
             end)
             
             local now = timer.systime()
             
-            if next_frame > now then 
+            if self.data.next_frame > now then 
                 return 
             end
             
-            next_frame = now + fps_delta
+            self.data.next_frame = now + fps_delta
         
             render.selectRenderTarget(name)
             
@@ -213,14 +231,14 @@ else
                 self.paint()
             end
             
-            render.setColor(Color(0,0,128))
+            render.setColor(clr.blue)
             render.drawRectFast(self.style.x+5,self.style.y+5,self.style.width*0.52,25)
             
             self:drawHitBox(0,self.style.x+5,self.style.y+5,self.style.width*0.52-59,25,function()
                 local distOffset=self.renderer:getPos():getDistance(player():getEyePos())-5
                 
                 net.start("sv_dragSync")
-                net.writeTable({true,self.name,self.cursor[1],distOffset})
+                net.writeTable({true,self.name,self.data.cursor[1],distOffset})
                 net.send()
                 
                 hook.add("mouseWheeled","dist_"..self.name,function(delta)
@@ -237,7 +255,7 @@ else
                         hook.remove("mouseWheeled","dist_"..self.name)
                                         
                         net.start("sv_dragSync")
-                        net.writeTable({false,self.name,self.cursor[1]})
+                        net.writeTable({false,self.name,self.data.cursor[1]})
                         net.send()
                         
                         return
@@ -287,7 +305,10 @@ else
             
             render.setMaterial(icons.cursor)
             render.setColor(Color(255,255,255))
-            render.drawTexturedRectUV(self.cursor[1][2]-3.2,self.cursor[1][1],30,30,0,0,32/1024,32/1024)
+            
+            if self.data.cursor[1] and Vector(self.data.cursor[1][2]-3.2,self.data.cursor[1][1]):withinAABox(Vector(self.style.x+5,self.style.y+5),Vector(self.style.x+5+self.style.width*0.52,self.style.y+5+self.style.height*0.52)) then
+                render.drawTexturedRectUV(self.data.cursor[1][2]-3.2,self.data.cursor[1][1],30,30,0,0,32/1024,32/1024)
+            end
             
             if !debugging then 
                 return 
@@ -303,7 +324,7 @@ else
             end
         end)
 
-        self.renderer = holograms.create(chip():getPos(), Angle(90,-90,0), "models/holograms/plane.mdl",Vector(self.style.size))
+        self.renderer = holograms.create(pos or chip():getPos(), ang or Angle(90,-90,0), "models/holograms/plane.mdl",Vector(self.style.size))
         self.renderer:setMaterial("!" .. self.mat:getName())
         self.renderer:setFilterMin(1)
         self.renderer:setFilterMag(1)
@@ -316,9 +337,17 @@ else
                 self.style.fullscreen=not self.style.fullscreen
                 
                 if !self.style.fullscreen then
-                    self.style.width=self.style.last[1]
-                    self.style.height=self.style.last[2]
+                    self.style.x=self.style.last[1]
+                    self.style.y=self.style.last[2]
+                    self.style.width=self.style.last[3]
+                    self.style.height=self.style.last[4]
                 else
+                    self.style.last[1]=self.style.x
+                    self.style.last[2]=self.style.y
+                    self.style.last[3]=self.style.width
+                    self.style.last[4]=self.style.height
+                    self.style.x=0
+                    self.style.y=0
                     self.style.width=(980*2)-5
                     self.style.height=(980*2)-5
                 end
@@ -344,8 +373,10 @@ else
 
         net.receive("cl_sync"..self.name,function()
             local packet=net.readTable()
-            
-            self.hitboxes[packet[2]][6]=packet[1]
+
+            if self.hitboxes[packet[2]] then
+                self.hitboxes[packet[2]][6]=packet[1]
+            end
         end)
         
         net.receive("cl_dragSync"..self.name,function()
@@ -403,8 +434,12 @@ else
         end)
         
         hook.add("think","hitboxes_"..self.name,function()
+            if !self.data.cursor[1] then
+                return
+            end
+            
             for i, hitbox in pairs(self.hitboxes) do
-                if self.cursor[1]:withinAABox(hitbox[1],hitbox[2]) then
+                if self.data.cursor[1]:withinAABox(hitbox[1],hitbox[2]) then
                     if !hitbox[4] then
                         hitbox[4]=true
                         
@@ -439,13 +474,7 @@ else
             end
         end)
         
-        bass.loadURL("https://cdn.discordapp.com/attachments/1120967741801762919/1148802726139023430/DING.WAV","noblock 3d",function(snd)
-            if snd then
-                snd:setVolume(0.5)
-                snd:play()
-                snd:setPos(self.renderer:getPos())
-            end
-        end)
+        self:play("https://cdn.discordapp.com/attachments/1120967741801762919/1148802726139023430/DING.WAV",0.5)
         
         return self
     end
@@ -555,6 +584,19 @@ else
         end
     end
     
+    function window:error(str)
+        self.data.errors=self.data.errors+1
+        
+        local error=window:new(self.name.."_err"..self.data.errors,{
+            x=self.data.cursor[1][1],
+            y=self.data.cursor[1][2],
+            width=300*2,
+            height=100*2,
+            size=3,
+            --icon=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1145151102220771418/conn_dialup_recbin_phone.png")
+        },self.renderer:getPos()+self.renderer:getUp()*2,self.renderer:getAngles())
+    end
+    
     function window:drawButtonToggle(id,x,y,width,height,data,callBack,bool,text)
         self:drawHitBox(id,x,y,width,height,callBack)
         
@@ -586,12 +628,12 @@ else
         render.drawText(x+2,y,self.hitboxes[id][6] or "")
     end
     
-    function window:colorPalette(x,y,columns,rows)
+    function window:colorPalette(id,x,y,width,height,columns,rows)
         for i=1, columns do
             for ii=1, rows do
                 render.setColor(Color(255/columns-i*255/columns,1,1.5-ii*1/rows):hsvToRGB())
-                render.drawRectFast(x+(i-1)*13,y+(ii-1)*13,9,9)
-                render.drawBorder(x+(i-1)*13-1,y+(ii-1)*13-1,10,10,true)
+                render.drawRectFast(x+(i-1)*(width/columns),y+(ii-1)*(height/rows),9,9)
+                render.drawBorder(x+(i-1)*(width/columns)-1,y+(ii-1)*(height/rows)-1,10,10,true)
             end
         end
     end
