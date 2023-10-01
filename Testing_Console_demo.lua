@@ -44,11 +44,13 @@ else
     end
        
     local con=window:new("Test Console",{
-        x=0,
-        y=0,
         width=500*2,
         height=350*2,
         size=3,
+        fonts={
+            large=21.5,
+            small=11.5
+        },
         icon=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1145151102220771418/conn_dialup_recbin_phone.png")
     })
         
@@ -70,6 +72,7 @@ else
                 end)
             end
         end
+        
         if packet[2] then
             local plys=table.add({""},find.allPlayers())
             plys[#plys+1]=""
@@ -80,6 +83,7 @@ else
                 end)
             end
         end
+        
         if packet[3] then
             for i=1,33 do
                 logger[34-i]={"<line>"}
@@ -121,7 +125,7 @@ else
             net.send()
         end)
         
-        con:colorPalette(9,38,168,118,45,9,3)
+        con:colorPalette(9,38,168,118,55,9,3)
         
         con:textBox(4,38,225,90)
         
@@ -152,7 +156,8 @@ else
         end,data.logChat,"Enable Chat Logging")
             
         render.drawRectEx(180,50,325,300,{
-            text=logger
+            text=logger,
+            color=con.data.user.color
         })
             
         render.drawTextEx(14,33,"sup",{

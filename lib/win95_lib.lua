@@ -35,9 +35,11 @@ if SERVER then
             timer.create("waitList_"..time,time,0,function()
                 if list[#waitList[time]] then
                     list[#waitList[time]]()
+                    
                     waitList[time][#waitList[time]]=nil
                 else
                     timer.remove("waitList_"..time)
+                    
                     waitList[time]=nil
                 end
             end)
@@ -77,14 +79,13 @@ if SERVER then
         net.start("cl_dragSync"..packet[2])
         net.writeTable(packet)
         net.writeEntity(ply)
-        net.send((packet[1]=="setSync" and !game.isSinglePlayer()) and find.allPlayers(function(plyI)
+        net.send((packet[1]=="setSync" and (!game.isSinglePlayer()) and #find.allPlayers()!=1) and find.allPlayers(function(plyI)
             if plyI!=ply then
                 return plyI
             end
         end) or nil)
     end)
 else
-    local data={}
     local fps_delta = 1/30
     local icons={
         cursor=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1148745004609716254/arrow.png"),
@@ -170,23 +171,25 @@ else
         self.name=name
         self.style=style
         self.style.last={}
+        self.style.x=self.style.x or 0
+        self.style.y=self.style.y or 0
         self.parentWin=parentWin
-        self.title=title or name
         self.hitboxes={}
         self.data={
             next_frame=0,
             cursor={Vector(0)},
-            errors=0
+            errors=0,
+            user={}
         }
 
         render.createRenderTarget(self.name)
         
-        self.h1=render.createFont("DebugFixed",64/self.style.size,300,false)
-        self.h2=render.createFont("DebugFixedSmall",35/self.style.size,300,false)
+        self.h1=render.createFont("DebugFixed",self.style.fonts and self.style.fonts.large or 21.5,300,false)
+        self.h2=render.createFont("DebugFixedSmall",self.style.fonts and self.style.fonts.small or 11.5,300,false)
     
         self.mat = material.create("UnlitGeneric") 
         self.mat:setTextureRenderTarget("$basetexture",name)
-        self.mat:setInt("$flags", 0)   
+        self.mat:setInt("$flags",0)   
         self.mat:setInt("$flags",256) 
         
         hook.add("renderoffscreen","render_"..self.name,function()
@@ -265,7 +268,7 @@ else
             
             render.setFont(self.h1)
             render.setColor(Color(255,255,255))
-            render.drawText(self.style.x+(self.style.icon and 28 or 15),self.style.y+9,self.title)
+            render.drawText(self.style.x+(self.style.icon and 28 or 15),self.style.y+9,self.style.title or self.name)
             
             render.setMaterial(icons.minmax)
             render.drawTexturedRectUV(self.style.x+self.style.width*0.52-54,self.style.y+12.5,15*2.29,15,0,0,32/1024,14/1024)
@@ -535,6 +538,10 @@ else
                     if data.text[i] and data.text[i][1] then
                         local num=(#data.text+1)-i
                         
+                        if data.color then
+                            render.setColor(data.color)
+                        end
+                        
                         render.drawText(x+(#tostring(num)==1 and 5 or 3),y+(i-1)*9+2,string.replace(data.text[(#data.text+1)-i][1],"<line>",#tostring(num)==1 and num.." " or num))
                     end
                 end
@@ -584,19 +591,6 @@ else
         end
     end
     
-    function window:error(str)
-        self.data.errors=self.data.errors+1
-        
-        local error=window:new(self.name.."_err"..self.data.errors,{
-            x=self.data.cursor[1][1],
-            y=self.data.cursor[1][2],
-            width=300*2,
-            height=100*2,
-            size=3,
-            --icon=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1145151102220771418/conn_dialup_recbin_phone.png")
-        },self.renderer:getPos()+self.renderer:getUp()*2,self.renderer:getAngles())
-    end
-    
     function window:drawButtonToggle(id,x,y,width,height,data,callBack,bool,text)
         self:drawHitBox(id,x,y,width,height,callBack)
         
@@ -627,13 +621,70 @@ else
         render.setColor(clr.black5)
         render.drawText(x+2,y,self.hitboxes[id][6] or "")
     end
+
+    function window:error(str)
+        self.data.errors=self.data.errors+1
+        
+        local error=window:new(self.name.."_err"..self.data.errors,{
+            x=self.data.cursor[1][1],
+            y=self.data.cursor[1][2],
+            width=300*2,
+            height=100*2,
+            size=3,
+            --icon=render.createMaterial("https://cdn.discordapp.com/attachments/1120967741801762919/1145151102220771418/conn_dialup_recbin_phone.png")
+        },self.renderer:getPos()+self.renderer:getUp()*2,self.renderer:getAngles())
+    end
     
-    function window:colorPalette(id,x,y,width,height,columns,rows)
+    function window:colorPalette(id,x,y,width,height,columns,rows,data)
+        if !data then
+            data={
+                customRows=1,
+                boxWidth=9,
+                boxHeight=9
+            }
+        else
+            data.customRows=data.customRows or 1
+            data.boxWidth=data.boxWidth or 9
+            data.boxHeight=data.boxHeight or 9
+        end
+        
+        local rows=rows+1
+        
         for i=1, columns do
             for ii=1, rows do
-                render.setColor(Color(255/columns-i*255/columns,1,1.5-ii*1/rows):hsvToRGB())
-                render.drawRectFast(x+(i-1)*(width/columns),y+(ii-1)*(height/rows),9,9)
-                render.drawBorder(x+(i-1)*(width/columns)-1,y+(ii-1)*(height/rows)-1,10,10,true)
+                local Clr=ii>rows-data.customRows and "blank" or Color(360/columns-i*360/columns-i,1,1.5-ii*1/(rows-data.customRows)):hsvToRGB()
+                
+                render.setColor(Clr!="blank" and Clr or Color(255,255,255))
+                render.drawRectFast(x+(i-1)*(width/columns),y+(ii-1)*(height/rows),data.boxWidth,data.boxHeight)
+                render.drawBorder(x+(i-1)*(width/columns)-1,y+(ii-1)*(height/rows)-1,data.boxWidth+1,data.boxHeight+1,true)
+
+                self:drawHitBox(id+(i*ii),x+(i-1)*(width/columns),y+(ii-1)*(height/rows),data.boxWidth,data.boxHeight,function()
+                    if Clr=="blank" then
+                        local prompt=window:new(self.name.."_color"..i*ii,{
+                            x=0,
+                            y=0,
+                            width=300*2,
+                            height=200*2,
+                            size=3,
+                            title="Color"
+                        },self.renderer:getPos()+self.renderer:getUp()*2+((self.renderer:getRight()*(self.data.cursor[1][2]/(75))))+((self.renderer:getForward()*(self.data.cursor[1][1]/(50)))),self.renderer:getAngles())
+                        
+                        prompt.paint=function()
+                            render.drawTextEx(15,36,"Basic colors:",{
+                                bold=true
+                            })
+                            
+                            prompt:colorPalette(1,18,51,118,80,9,6,{
+                                customRows=0,
+                                boxHeight=8
+                            })
+                        end
+                        
+                        return
+                    end
+                    
+                    self.data.user.color=Clr
+                end)
             end
         end
     end
